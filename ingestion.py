@@ -36,10 +36,11 @@ def merge_multiple_dataframe(data_folder=input_folder_path):
     deduped_df = combined_df.drop_duplicates()
 
     # Save the compiled DataFrame to a CSV file
-    deduped_df.to_csv('finaldata.csv', index=False)
+    deduped_df.to_csv(os.path.join(output_folder_path, 'finaldata.csv'), index=False)
+
 
     # Record the ingested files in a txt file
-    with open('ingestedfiles.txt', 'w') as f:
+    with open(os.path.join(output_folder_path, 'ingestedfiles.txt'), 'w') as f:
         for file in all_files:
             if file.endswith('.csv'):
                 f.write(f"{file}\n")
