@@ -20,7 +20,11 @@ prediction_model = None
 @app.route("/prediction", methods=['POST', 'OPTIONS'])
 def predict():
     if request.method == 'POST':
-        file_location = request.form['file_location']
+            # Get the file_location from the request
+        file_location = request.json.get("file_location", "")
+
+        if not os.path.exists(file_location):
+            return jsonify({"error": f"File not found: {file_location}"}), 400
         predictions = model_predictions(file_location)
         return jsonify(predictions=predictions)
     return jsonify(message="Provide file location"), 200
