@@ -5,14 +5,22 @@ import scoring
 import deployment
 import diagnostics
 import reporting
+
+import subprocess
+
 import ingestion
 
 import json
 import os
 
 import pickle
+from sklearn.preprocessing import LabelEncoder
+
 from scoring import score_model
 import pandas as pd
+from sklearn.metrics import f1_score
+
+import sys
 
 
 ##################Check and read new data
@@ -42,10 +50,10 @@ def check_and_read_new_data():
 
     if not new_files:
         print("No new files found. Ending the process.")
-        return
+        return False
 
     # If new data is found, proceed to the next step (checking for model drift)
-    print(f"New files found: {', '.join(new_files)}")
+    print(f"New files found and ingested: {', '.join(new_files)}")
 
     return new_files
 
@@ -75,15 +83,31 @@ def check_for_model_drift(new_files, config):
         new_data.append(data)
 
     new_data = pd.concat(new_data, axis=0)
-    predictions = model.predict(new_data)
+
+
+    test_data = new_data
+    # Preprocess the data by encoding categorical features
+    le = LabelEncoder()
+    test_data['corporation'] = le.fit_transform(test_data['corporation'])
+
+    # Define the features (X_test) and target (y_test)
+    X_test = test_data.drop('exited', axis=1)
+    y_test = test_data['exited']
+
+    predictions = model.predict(X_test)
 
     # Get a score for the new predictions
-    new_score = score_model(predictions, new_data)
+     # Calculate F1 score
+    f1_new = f1_score(y_test, predictions)
+    #new_score = score_model(predictions, new_data)
 
     # Check for model drift
-    model_drift = new_score < latest_score
+    model_drift = f1_new > latest_score
 
-    return model_drift, new_score
+    print(f"latest_score: {latest_score}")
+    print(f"f1_new: {f1_new}")
+
+    return model_drift, latest_score, f1_new
 
 
 def detect_model_drift():
@@ -96,25 +120,42 @@ def detect_model_drift():
         return
 
     # If new data is found, proceed to check for model drift
-    print(f"New files found: {', '.join(new_files)}")
+    print(f"Detecting model drift for new data files:{', '.join(new_files)}")
 
     # Load configuration
     with open('config.json', 'r') as f:
         config = json.load(f)
 
-    model_drift, new_score = check_for_model_drift(new_files, config)
+    model_drift, latest_score, f1_new = check_for_model_drift(new_files, config)
 
-    if model_drift:
-        print(f"Model drift detected. New score: {new_score:.4f}")
-        # Proceed with the rest of the deployment process
+
+
+
+    if model_drift == True:
+        print(f"Model drift detected. New score: {f1_new:.4f}")
+        print('Continue to train model with new data')
+        training.train_model()
+        print('Re-deploying newly trained model')
+        deployment.store_model_into_pickle()
+        # Define the command to run the external script
+        command = ["python", "apicalls.py"]
+
+        # Run the command
+        result = subprocess.run(command, capture_output=True, text=True)
+
+        # Check the return code (0 indicates success)
+        if result.returncode == 0:
+            print("The external script ran successfully.")
+            print("Output:", result.stdout)
+        else:
+            print("The external script encountered an error.")
+            print("Error:", result.stderr)
+
+        reporting.score_model()
+
     else:
-        print(f"No model drift detected. New score: {new_score:.4f}")
-        # No need to proceed with the rest of the deployment process
-
-
-##################Deciding whether to proceed, part 2
-#if you found model drift, you should proceed. otherwise, do end the process here
-
+        print(f"No model drift detected. Old score: {latest_score:.4f}")
+        return
 
 
 ##################Re-deployment
@@ -125,11 +166,12 @@ def detect_model_drift():
 
 if __name__ == "__main__":
     new_files = check_and_read_new_data()
+
     if new_files:
-        print(f"New files ingested: {', '.join(new_files)}")
+        detect_model_drift()
     else:
-        print("No new files found.")
-    detect_model_drift()
+        sys.exit()
+
 
 
 

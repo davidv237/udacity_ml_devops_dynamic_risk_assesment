@@ -45,4 +45,3 @@ def score_model():
 
 # Call the function to score the model
 score = score_model()
-print(f"F1 score: {score}")

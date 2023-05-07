@@ -50,7 +50,7 @@ def score_model():
     plt.title('Confusion Matrix')
 
     # Save the confusion matrix plot to the workspace
-    cm_plot_path = os.path.join(config['output_folder_path'], 'confusionmatrix.png')
+    cm_plot_path = os.path.join(config['output_model_path'], 'confusionmatrix.png')
     plt.savefig(cm_plot_path)
 
 if __name__ == '__main__':
