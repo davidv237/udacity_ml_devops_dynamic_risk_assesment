@@ -10,6 +10,11 @@ import ingestion
 import json
 import os
 
+import pickle
+from scoring import score_model
+import pandas as pd
+
+
 ##################Check and read new data
 #first, read ingestedfiles.txt
 
@@ -47,6 +52,39 @@ def check_and_read_new_data():
 
 ##################Checking for model drift
 #check whether the score from the deployed model is different from the score from the model that uses the newest ingested data
+
+def check_for_model_drift(new_files, config):
+    # Read the score from latestscore.txt
+    prod_deployment_path = config['prod_deployment_path']
+    latest_score_file = os.path.join(prod_deployment_path, 'latestscore.txt')
+
+    with open(latest_score_file, 'r') as f:
+        latest_score = float(f.read().strip())
+
+    # Load the trained model
+    model_file = os.path.join(prod_deployment_path, 'trainedmodel.pkl')
+    with open(model_file, 'rb') as f:
+        model = pickle.load(f)
+
+    # Make predictions on the new data
+    input_folder_path = config['input_folder_path']
+    new_data = []
+    for file in new_files:
+        file_path = os.path.join(input_folder_path, file)
+        data = pd.read_csv(file_path)
+        new_data.append(data)
+
+    new_data = pd.concat(new_data, axis=0)
+    predictions = model.predict(new_data)
+
+    # Get a score for the new predictions
+    new_score = score_model(predictions, new_data)
+
+    # Check for model drift
+    model_drift = new_score < latest_score
+
+    return model_drift, new_score
+
 
 def detect_model_drift():
     # Check and read new data
@@ -91,6 +129,7 @@ if __name__ == "__main__":
         print(f"New files ingested: {', '.join(new_files)}")
     else:
         print("No new files found.")
+    detect_model_drift()
 
 
 
